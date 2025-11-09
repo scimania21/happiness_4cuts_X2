@@ -28,12 +28,12 @@
         
         #capture-progress-overlay {
             position: absolute; top: 15px; right: 20px;
-            font-size: 36px; /* 카운트다운(150px)보다 작게 설정 */
+            font-size: 36px;
             font-weight: 700; color: #fff;
             text-shadow: 1px 1px 4px rgba(0,0,0,.8);
             -webkit-text-stroke: 1px #000;
-            display: none; /* JS로 제어 */
-            z-index: 10; /* 비디오 위에, 카운트다운보다는 아래에 */
+            display: none;
+            z-index: 10;
         }
 
         #capture-controls { margin-top: 15px; }
@@ -42,15 +42,14 @@
         #import-photos-btn:hover { background-color: #2980b9; }
         
         #thumbnails {
-            display: flex; flex-wrap: wrap; /* 래핑 허용 */
-            gap: 10px; justify-content: center; /* 중앙 정렬 */
-            margin-top: 15px; min-height: 80px; /* 최소 높이 (padding + slot height) */
-            height: auto; /* 내용에 따라 높이 자동 조절 */
+            display: flex; flex-wrap: wrap;
+            gap: 10px; justify-content: center;
+            margin-top: 15px; min-height: 80px;
+            height: auto;
             padding: 10px; background: #fff;
             border-radius: 5px;
         }
 
-        /* 썸네일 슬롯 (placeholder) */
         .thumbnail-slot {
             width: 80px; height: 60px;
             background-color: #eee;
@@ -60,7 +59,6 @@
             box-sizing: border-box;
         }
 
-        /* 썸네일 슬롯에 채워진 이미지 */
         .thumbnail-slot img {
             width: 100%; height: 100%;
             object-fit: cover;
@@ -76,6 +74,16 @@
         .footer { margin-top: 40px; font-size: 14px; color: #888; }
         #camera-controls { margin-bottom: 10px; }
         #camera-select { padding: 8px; border-radius: 5px; border: 1px solid #ccc; font-size: 14px; }
+        
+        #custom-text-input {
+            padding: 10px;
+            border-radius: 5px;
+            border: 1px solid #ccc;
+            font-size: 14px;
+            margin: 10px 5px 0 5px;
+            width: 300px;
+            box-sizing: border-box;
+        }
     </style>
 </head>
 <body>
@@ -137,10 +145,14 @@
 
     <div id="editor-screen" class="screen">
         <h2>🎨 사진 편집</h2>
-        <p class="instructions">사진을 드래그하여 위치를 옮기고, 모서리 핸들이나 단축키(W/A/S/D)로 크기와 방향을 조절하세요.</p>
+        <p class="instructions">사진을 드래그하여 위치를 옮기고, 모서리 핸들(W/A/S/D)로 크기와 방향을 조절하세요. <br>하단에 원하는 문구를 입력할 수 있습니다.</p>
         <canvas id="canvas"></canvas>
         
-        <div class="controls" style="margin-top:20px">
+        <div class="controls" style="margin-top:10px">
+            <input type="text" id="custom-text-input" placeholder="원하는 문구를 입력하세요..." maxlength="46">
+        </div>
+        
+        <div class="controls" style="margin-top:15px">
             <button id="download-btn">이미지 다운로드</button>
             <button id="redo-capture-btn">다시 촬영</button>
             <button id="restart-btn">처음으로</button>
@@ -180,6 +192,7 @@
 
         const importPhotosBtn = document.getElementById('import-photos-btn');
         const photoImporter = document.getElementById('photo-importer');
+        const customTextInput = document.getElementById('custom-text-input');
 
         let state = {
             selectedFrameSrc: null,
@@ -199,7 +212,6 @@
         let autoCaptureTimer = null;
         let countdownInterval = null;
 
-        // 변수명 변경: thanksgiving -> happiness
         const frameSlots = {
             happiness_4_slots: [
                 [0.0589, 0.0504, 0.4203, 0.3817], // 1번 슬롯 (좌상)
@@ -375,7 +387,6 @@
             const label = selectedOption.text.toLowerCase();
             const isRearCamera = label.includes('back') || label.includes('rear') || label.includes('후면');
 
-            // 거울 모드 처리 (필요시 추가)
             if (!isRearCamera) {
                  // tempCtx.translate(tempCanvas.width, 0);
                  // tempCtx.scale(-1, 1);
@@ -572,8 +583,24 @@
                 ctx.drawImage(state.frameImage, 0, 0, canvas.width, canvas.height);
             }
             
+            // 날짜 그리기 (Y좌표 0.8881)
             drawDate(0.2686 * canvas.width, 0.8881 * canvas.height);
             drawDate(0.7368 * canvas.width, 0.8881 * canvas.height);
+            
+            
+            const customText = customTextInput ? customTextInput.value : "";
+    
+            // BBox 1 (Left): (x: 0.0673, y: 0.9020)
+            const box1X = 0.0673 * canvas.width;
+            const box1Y = 0.9020 * canvas.height; 
+            const boxWidth = (0.4658 - 0.0673) * canvas.width; 
+            const boxHeight = (0.9444 - 0.9048) * canvas.height;
+            drawLimitedTextInBox(customText, box1X, box1Y, boxWidth, boxHeight); 
+
+            // BBox 2 (Right):
+            const box2X = (0.7368 - (0.4658 - 0.0673) / 2) * canvas.width;
+            const box2Y = 0.9020 * canvas.height; 
+            drawLimitedTextInBox(customText, box2X, box2Y, boxWidth, boxHeight); 
 
             if (activePhoto) {
                 drawHandles(activePhoto);
@@ -593,6 +620,53 @@
             ctx.textAlign = 'center';
             ctx.textBaseline = 'middle';
             ctx.fillText(dateString, x, y);
+            ctx.restore();
+        }
+
+        function drawLimitedTextInBox(text, boxX, boxY, boxWidth, boxHeight) {
+            if (!text) return;
+
+            ctx.save();
+            
+            const fontSize = 30;
+            // =============================================
+            // 🎨 요청하신 수정 사항 (줄 간격 1.3으로 변경)
+            // =============================================
+            const lineHeight = fontSize * 1.3; // (기존 1.1)
+            // =============================================
+            ctx.font = `bold ${fontSize}px "Malgun Gothic", sans-serif`;
+            ctx.fillStyle = '#555';
+            ctx.textAlign = 'center'; 
+            ctx.textBaseline = 'middle'; 
+
+            const lines = [];
+            lines.push(text.substring(0, 23)); // 첫 번째 줄
+            if (text.length > 23) {
+                lines.push(text.substring(23, 46)); // 두 번째 줄
+            }
+
+            const totalTextHeight = lines.length * lineHeight;
+            let startY;
+
+            if (totalTextHeight > boxHeight) {
+                startY = boxY;
+            } else {
+                startY = boxY + (boxHeight - totalTextHeight) / 2;
+            }
+
+            startY += lineHeight / 2;
+            const textCenterX = boxX + boxWidth / 2;
+
+            for (let i = 0; i < lines.length; i++) {
+                const lineY = startY + (i * lineHeight);
+                
+                if (lineY > (boxY + boxHeight + lineHeight / 2)) {
+                    break; 
+                }
+                
+                ctx.fillText(lines[i], textCenterX, lineY);
+            }
+
             ctx.restore();
         }
 
@@ -726,7 +800,7 @@
 
         document.addEventListener('keydown', e => {
             if (!activePhoto) return;
-            if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+            if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || (customTextInput && e.target === customTextInput)) return;
 
             const scaleFactor = 1.05;
             const rotateAngle = Math.PI / 180 * 5; 
@@ -766,9 +840,13 @@
         canvas.addEventListener('touchend', handlePointerUp);
         canvas.addEventListener('touchcancel', handlePointerUp);
 
+        if (customTextInput) {
+            customTextInput.addEventListener('input', drawCanvas);
+        }
+
         downloadBtn.addEventListener('click', () => {
             activePhoto = null;
-            drawCanvas();
+            drawCanvas(); 
             const now = new Date();
             const timestamp = now.getFullYear().toString() +
                               (now.getMonth() + 1).toString().padStart(2, '0') +
@@ -777,7 +855,6 @@
                               now.getMinutes().toString().padStart(2, '0') +
                               now.getSeconds().toString().padStart(2, '0');
             const link = document.createElement('a');
-            // 다운로드 파일명 변경: 추수감사네컷 -> 행복네컷
             link.download = `행복네컷_${timestamp}.png`; 
             link.href = canvas.toDataURL('image/png');
             document.body.appendChild(link);
@@ -801,6 +878,10 @@
             isDragging = false;
             isResizing = false;
             isRotating = false;
+            
+            if (customTextInput) {
+                customTextInput.value = ""; 
+            }
 
             captureCountSpan.textContent = "0";
             thumbnailsContainer.innerHTML = ""; 
@@ -829,7 +910,10 @@
             
             requiredCaptureCountSpan.textContent = "0";
             requiredPhotosCountCapture.textContent = "0";
-
+            
+            if (customTextInput) {
+                customTextInput.value = ""; 
+            }
             captureProgressOverlay.style.display = 'none';
             captureProgressOverlay.textContent = '';
 
